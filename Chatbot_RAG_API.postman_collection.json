@@ -1,0 +1,833 @@
+{
+  "info": {
+    "name": "Chatbot RAG API",
+    "description": "Colección completa para probar el Chatbot RAG con LLM local.\n\n## Flujo de uso:\n1. Verificar salud del sistema\n2. Ingestar documentos\n3. Crear sesión\n4. Hacer preguntas\n\n## Variables:\n- `base_url`: URL base de la API\n- `session_id`: Se auto-guarda al crear sesión o hacer chat",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://160.153.181.191:8000",
+      "type": "string"
+    },
+    {
+      "key": "session_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "document_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "description": "Endpoints de estado del sistema",
+      "item": [
+        {
+          "name": "Health Check Completo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Verificar estado completo del sistema: LLM, vector store, cache, queue y rate limiting."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('System is healthy', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.be.oneOf(['healthy', 'degraded']);",
+                  "});",
+                  "",
+                  "pm.test('LLM is connected', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.services.llm.status).to.eql('connected');",
+                  "});",
+                  "",
+                  "pm.test('Cache stats present', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.cache).to.have.property('search');",
+                  "    pm.expect(jsonData.cache).to.have.property('response');",
+                  "});",
+                  "",
+                  "pm.test('Queue is running', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.queue.running).to.eql(true);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Liveness Probe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health/live",
+              "host": ["{{base_url}}"],
+              "path": ["health", "live"]
+            },
+            "description": "Probe de liveness (Kubernetes). Verifica que la API está corriendo."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Is alive', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql('alive');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Readiness Probe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health/ready",
+              "host": ["{{base_url}}"],
+              "path": ["health", "ready"]
+            },
+            "description": "Probe de readiness (Kubernetes). Verifica que el LLM está conectado y listo."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "description": "Gestión de documentos: subir, ingestar, listar y eliminar",
+      "item": [
+        {
+          "name": "Ingestar Documentos (directorio)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/ingest",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "documents", "ingest"]
+            },
+            "description": "Procesa todos los documentos de la carpeta `documents/` y los indexa en el vector store.\n\nFormatos soportados: PDF, TXT, MD, DOCX"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Ingestion successful', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.eql(true);",
+                  "    console.log('Documents processed: ' + jsonData.documents_processed);",
+                  "    console.log('Total chunks: ' + jsonData.total_chunks);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ingestar desde directorio custom",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"directory\": \"C:/ruta/a/tus/documentos\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/ingest",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "documents", "ingest"]
+            },
+            "description": "Procesa documentos desde un directorio específico (no el default)."
+          }
+        },
+        {
+          "name": "Subir Documento (archivo)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Selecciona un archivo PDF, TXT, MD o DOCX"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/upload",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "documents", "upload"]
+            },
+            "description": "Sube y procesa un archivo individual.\n\nFormatos: PDF, TXT, MD, DOCX"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Upload successful', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.eql(true);",
+                  "    pm.collectionVariables.set('document_id', jsonData.document_id);",
+                  "    console.log('Document ID: ' + jsonData.document_id);",
+                  "    console.log('Chunks created: ' + jsonData.chunks_created);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar Documentos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "documents"]
+            },
+            "description": "Lista todos los documentos indexados en el vector store."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Has documents list', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('documents');",
+                  "    pm.expect(jsonData).to.have.property('total_count');",
+                  "    console.log('Total documents: ' + jsonData.total_count);",
+                  "    ",
+                  "    if (jsonData.documents.length > 0) {",
+                  "        pm.collectionVariables.set('document_id', jsonData.documents[0].id);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar Documento",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/{{document_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "documents", "{{document_id}}"]
+            },
+            "description": "Elimina un documento del vector store por su ID.\n\nNota: No elimina el archivo original del disco."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Delete successful', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.eql(true);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Sessions",
+      "description": "Gestión de sesiones de conversación",
+      "item": [
+        {
+          "name": "Crear Sesión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"metadata\": {\n        \"user\": \"test-user\",\n        \"department\": \"IT\"\n    }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/sessions",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "sessions"]
+            },
+            "description": "Crea una nueva sesión de chat. Devuelve un session_id para usar en las preguntas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Session created', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('session_id');",
+                  "    pm.collectionVariables.set('session_id', jsonData.session_id);",
+                  "    console.log('Session ID: ' + jsonData.session_id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar Sesiones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sessions",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "sessions"]
+            },
+            "description": "Lista todas las sesiones activas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns array', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "    console.log('Active sessions: ' + jsonData.length);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener Sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sessions/{{session_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "sessions", "{{session_id}}"]
+            },
+            "description": "Obtener información de una sesión específica."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Has session data', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('session_id');",
+                  "    pm.expect(jsonData).to.have.property('message_count');",
+                  "    console.log('Messages: ' + jsonData.message_count);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver Mensajes de Sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sessions/{{session_id}}/messages",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "sessions", "{{session_id}}", "messages"]
+            },
+            "description": "Ver todo el historial de mensajes de una sesión."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Has messages', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('messages');",
+                  "    pm.expect(jsonData).to.have.property('total_messages');",
+                  "    console.log('Total messages: ' + jsonData.total_messages);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar Sesión",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sessions/{{session_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "sessions", "{{session_id}}"]
+            },
+            "description": "Eliminar una sesión y todo su historial."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Delete successful', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.eql(true);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Limpiar Sesiones Expiradas",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sessions/cleanup",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "sessions", "cleanup"]
+            },
+            "description": "Eliminar todas las sesiones que superaron el TTL configurado."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Cleanup done', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.eql(true);",
+                  "    console.log('Sessions cleaned: ' + jsonData.sessions_cleaned);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Chat",
+      "description": "Endpoints de chat con RAG",
+      "item": [
+        {
+          "name": "Chat (nueva sesión)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"question\": \"¿Cuál es la política de vacaciones?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat"]
+            },
+            "description": "Envía una pregunta sin session_id. Se crea una sesión automáticamente.\n\nEl session_id se guarda para las siguientes preguntas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Has answer and session', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('answer');",
+                  "    pm.expect(jsonData).to.have.property('session_id');",
+                  "    pm.expect(jsonData).to.have.property('sources');",
+                  "    pm.collectionVariables.set('session_id', jsonData.session_id);",
+                  "    console.log('Session: ' + jsonData.session_id);",
+                  "    console.log('Sources: ' + jsonData.sources.length);",
+                  "    console.log('Answer: ' + jsonData.answer.substring(0, 100) + '...');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chat (con sesión existente)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"question\": \"¿Y cuáles son los beneficios?\",\n    \"session_id\": \"{{session_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat"]
+            },
+            "description": "Envía pregunta con session_id para mantener contexto de conversación.\n\nEl chatbot recuerda preguntas anteriores de la sesión."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Same session maintained', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    var expectedSession = pm.collectionVariables.get('session_id');",
+                  "    pm.expect(jsonData.session_id).to.eql(expectedSession);",
+                  "    console.log('Answer: ' + jsonData.answer.substring(0, 100) + '...');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chat - Pregunta sobre horario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"question\": \"¿Cuál es el horario de trabajo y se permite trabajo remoto?\",\n    \"session_id\": \"{{session_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat"]
+            },
+            "description": "Ejemplo de pregunta sobre horario de trabajo."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Has relevant answer', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.answer.length).to.be.greaterThan(10);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chat - Pregunta sobre contacto RRHH",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"question\": \"¿Cómo contacto a Recursos Humanos?\",\n    \"session_id\": \"{{session_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat"]
+            },
+            "description": "Ejemplo de pregunta sobre información de contacto."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chat Stream (SSE)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"question\": \"¿Cuál es la misión y visión de la empresa?\",\n    \"session_id\": \"{{session_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/stream",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat", "stream"]
+            },
+            "description": "Chat con streaming (Server-Sent Events).\n\nLa respuesta llega en chunks incrementales.\nEl último chunk tiene `is_final: true` con los sources."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Content type is SSE', function () {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('text/event-stream');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Rate Limiting Test",
+      "description": "Pruebas de rate limiting",
+      "item": [
+        {
+          "name": "Rate Limit - Burst rapido (ejecutar varias veces)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"question\": \"test rate limit\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "chat"]
+            },
+            "description": "Ejecuta esta request muchas veces seguidas para probar el rate limiting.\n\nDespués de 10 requests rápidos, deberías recibir HTTP 429."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 429) {",
+                  "    pm.test('Rate limited (429)', function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.detail).to.include('Demasiadas solicitudes');",
+                  "        console.log('RATE LIMITED: ' + jsonData.detail);",
+                  "        var retryAfter = pm.response.headers.get('Retry-After');",
+                  "        console.log('Retry-After: ' + retryAfter + 's');",
+                  "    });",
+                  "} else {",
+                  "    pm.test('Request allowed', function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        console.log('Request passed rate limit');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

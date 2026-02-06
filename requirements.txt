@@ -1,0 +1,29 @@
+# API
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+
+# LangChain + LLM
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-ollama>=0.2.0
+langchain-chroma>=0.1.0
+
+# Vector Store
+chromadb>=0.4.0
+
+# Documents
+pypdf2>=3.0.0
+unstructured>=0.10.0
+python-docx>=0.8.11
+
+# Config & Logging
+pydantic-settings>=2.0.0
+loguru>=0.7.0
+
+# Sessions (opcional)
+redis>=5.0.0
+
+# Utils
+python-dotenv>=1.0.0
+aiofiles>=23.0.0

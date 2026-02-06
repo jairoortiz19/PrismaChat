@@ -1,0 +1,75 @@
+services:
+  chatbot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chatbot-rag
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./documents:/app/documents
+      - ./data:/app/data
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      # host.docker.internal apunta al host de Windows donde corre Ollama
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    networks:
+      - chatbot-network
+
+  # Ollama comentado porque ya corre localmente.
+  # Descomentar si quieres correr Ollama también en Docker.
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:11434/"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
+  #     start_period: 10s
+  #   restart: unless-stopped
+  #   networks:
+  #     - chatbot-network
+  #   # GPU support (NVIDIA):
+  #   # deploy:
+  #   #   resources:
+  #   #     reservations:
+  #   #       devices:
+  #   #         - driver: nvidia
+  #   #           count: all
+  #   #           capabilities: [gpu]
+
+  # Optional: Redis for session storage
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   command: redis-server --appendonly yes
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   restart: unless-stopped
+  #   networks:
+  #     - chatbot-network
+
+networks:
+  chatbot-network:
+    driver: bridge
+
+volumes:
+  ollama_data:
+  # redis_data:
